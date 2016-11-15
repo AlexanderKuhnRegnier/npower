@@ -62,7 +62,24 @@ def model(const,temps,predictions,index):
     else:
         heating = 0
     '''
-    heating = (1+alpha)*(Tb-T)*const[3]
+    '''
+    #only last half hour, 2 half hours, 3 half hours
+    if index>2:
+        retention = (const[11]*predictions[index-1]+
+                    const[12]*predictions[index-2]+
+                    const[13]*predictions[index-3])
+    else:
+        retention = 0
+    '''
+    if index>48*3:
+        retention = (
+                    const[11]*np.mean(predictions[index-48:index])+
+                    const[12]*np.mean(predictions[index-(48*2):index-48])+
+                    const[13]*np.mean(predictions[index-(48*3):index-(48*2)])
+                    )
+    else:
+        retention = 0
+    heating = (1+alpha)*(Tb-T)*const[3] + retention
     loss = const[4]*(Tb-T)
     if index%48<14 or index%48>=42:
         #night constants
@@ -88,6 +105,8 @@ def new_optimise(const,demands=demands,temps=temps):
     
 def get_results(const,demands=demands,temps=temps):
     predictions = np.zeros(len(temps))
+    #storage = np.zeros(len(temps+3))
+    #storage[:3] = np.array([0,0,0])
     print "Calling subnew"
     predicted = sub_new(const,temps,predictions)
     result = 1-abs(np.corrcoef(predicted,demands)[0][1])
@@ -108,7 +127,10 @@ bounds = (
 (-1.,1.),
 (-1.,1.),
 (-400,400),
-(-400,400)
+(-400,400),
+(-1,1),
+(-1,1),
+(-1,1)
 )
 
 #result = opt.basinhopping(new_optimise,[20,0,0,100,100,0,0,0,0],stepsize=0.01,niter=500)
@@ -150,7 +172,7 @@ slice(-1,1,1)
 result = opt.brute(new_optimise,ranges=ranges,finish=None,full_output=True)
 '''
 
-const = np.array([35,0.3,2,80,2,-1,-.23,1,1,0,0,0,0],dtype=np.float64)
+const = np.array([35,0.3,2,80,2,-1,-.23,1,1,0,0,0,0,0,0,0],dtype=np.float64)
 
 fig, ax = plt.subplots(figsize=(23,11.5))
 plt.subplots_adjust(left=0.45, bottom=0.0)
@@ -178,6 +200,9 @@ axCn= plt.axes(  [left, 0.55, width, height], axisbg=axcolor)
 axCd= plt.axes(  [left, 0.6 , width, height], axisbg=axcolor)
 axC = plt.axes(  [left, 0.65, width, height], axisbg=axcolor)
 axM = plt.axes(  [left, 0.7,  width, height], axisbg=axcolor)
+axD1= plt.axes(  [left, 0.75,  width, height], axisbg=axcolor)
+axD2= plt.axes(  [left, 0.8,  width, height], axisbg=axcolor)
+axD3= plt.axes(  [left, 0.85,  width, height], axisbg=axcolor)
 
 Tb = Slider(axTb, 'Tb', bounds[0][0],bounds[0][1], valinit=const[0])
 A = Slider(axA, 'A',    bounds[1][0],bounds[1][1], valinit=const[1])
@@ -192,6 +217,10 @@ Cn= Slider(axCn, 'Cn',    bounds[9][0],bounds[9][1], valinit=const[9])
 Cd= Slider(axCd, 'Cd',    bounds[10][0],bounds[10][1], valinit=const[10])
 C = Slider(axC , 'C' ,    -200,200, valinit=0)
 M = Slider(axM , 'M' ,    0,0.15, valinit=0.03)
+D1= Slider(axD1, 'D1',    bounds[11][0],bounds[11][1], valinit=const[11])
+D2= Slider(axD2, 'D2',    bounds[12][0],bounds[12][1], valinit=const[12])
+D3= Slider(axD3, 'D3',    bounds[13][0],bounds[13][1], valinit=const[13])
+
 '''
 def plotting(const):
     r = get_results(const)[1]
@@ -204,7 +233,8 @@ def plotting(const):
 def update(val):
     print "Getting results"
     results = get_results(np.array([Tb.val,A.val,phi.val,Tp.val,Lp.val,a0.val,
-                           a1.val,a2.val,a3.val,Cn.val,Cd.val]))
+                           a1.val,a2.val,a3.val,Cn.val,Cd.val,
+                           D1.val,D2.val,D3.val]))
     print "Got results"
     l2.set_ydata((results[1]*M.val)+C.val)
     ax.set_title(str(results[0]))
@@ -222,5 +252,8 @@ C.on_changed(update)
 M.on_changed(update)
 Cn.on_changed(update)
 Cd.on_changed(update)
+D1.on_changed(update)
+D2.on_changed(update)
+D3.on_changed(update)
 
 plt.show()
