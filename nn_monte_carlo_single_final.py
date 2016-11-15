@@ -10,7 +10,6 @@ import os
 import cPickle as pickle
 import numpy as np
 import copy
-import cPickle as pickle
 
 def power_prep(lim,powers):
     frames = []
