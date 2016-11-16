@@ -135,9 +135,9 @@ bounds = (
 constmin = [bound[0] for bound in bounds]
 constmax = [bound[1] for bound in bounds]
 
-const = np.array([35,0.3,2,80,2,-1,-.23,1,1,0,0,0,0,0],dtype=np.float64)
+const = np.array([40,0.239,1.49,75.7,2.22,-1.02,-1.01,-1,-0.989,-27.7,23.6,-0.655,0.414,0.212],dtype=np.float64)
 
-basinhopping = 1
+basinhopping = 0
 
 if basinhopping:
     class MyBounds(object):
@@ -197,7 +197,7 @@ result = opt.brute(new_optimise,ranges=ranges,finish=None,full_output=True)
 '''
 
 
-plot_sliders = 0
+plot_sliders = 1
 
 if plot_sliders:
     fig, ax = plt.subplots(figsize=(23,11.5))
@@ -242,7 +242,7 @@ if plot_sliders:
     Cn= Slider(axCn, 'Cn',    bounds[9][0],bounds[9][1], valinit=const[9])
     Cd= Slider(axCd, 'Cd',    bounds[10][0],bounds[10][1], valinit=const[10])
     C = Slider(axC , 'C' ,    -200,200, valinit=0)
-    M = Slider(axM , 'M' ,    0,0.15, valinit=0.03)
+    M = Slider(axM , 'M' ,    0,2., valinit=1.)
     D1= Slider(axD1, 'D1',    bounds[11][0],bounds[11][1], valinit=const[11])
     D2= Slider(axD2, 'D2',    bounds[12][0],bounds[12][1], valinit=const[12])
     D3= Slider(axD3, 'D3',    bounds[13][0],bounds[13][1], valinit=const[13])
