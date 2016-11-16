@@ -18,6 +18,7 @@ import math
 import time
 from numba import jit,float64
 from matplotlib.widgets import Slider, Button, RadioButtons
+from sklearn.preprocessing import StandardScaler
 
 plt.close('all')
 
@@ -135,7 +136,12 @@ bounds = (
 constmin = [bound[0] for bound in bounds]
 constmax = [bound[1] for bound in bounds]
 
-const = np.array([40,0.239,1.49,75.7,2.22,-1.02,-1.01,-1,-0.989,-27.7,23.6,-0.655,0.414,0.212],dtype=np.float64)
+#const = np.array([40,0.239,1.49,75.7,2.22,-1.02,-1.01,-1,-0.989,-27.7,23.6,-0.655,0.414,0.212],dtype=np.float64)
+
+const = np.array([ 39.89759094,   0.23986434,   1.48782018,  79.82501341, 
+                  1.95616592,  -1.02203147,  -1.02042863,  -1.01845583,   
+                  -1.01585489,  -6.45209124,   5.06102748,  -0.66028467,  
+                  0.42286959,   0.20653274],dtype=np.float64)
 
 basinhopping = 0
 
@@ -156,7 +162,7 @@ if basinhopping:
     mybounds = MyBounds(constmax,constmin)
     
     result = opt.basinhopping(new_optimise,const,
-                              stepsize=0.05,niter=100,
+                              stepsize=0.1,niter=10,
                               callback=print_fun,accept_test=mybounds)
 '''
 x = []
@@ -197,7 +203,7 @@ result = opt.brute(new_optimise,ranges=ranges,finish=None,full_output=True)
 '''
 
 
-plot_sliders = 1
+plot_sliders = 0
 
 if plot_sliders:
     fig, ax = plt.subplots(figsize=(23,11.5))
@@ -242,7 +248,7 @@ if plot_sliders:
     Cn= Slider(axCn, 'Cn',    bounds[9][0],bounds[9][1], valinit=const[9])
     Cd= Slider(axCd, 'Cd',    bounds[10][0],bounds[10][1], valinit=const[10])
     C = Slider(axC , 'C' ,    -200,200, valinit=0)
-    M = Slider(axM , 'M' ,    0,2., valinit=1.)
+    M = Slider(axM , 'M' ,    0,10., valinit=1.)
     D1= Slider(axD1, 'D1',    bounds[11][0],bounds[11][1], valinit=const[11])
     D2= Slider(axD2, 'D2',    bounds[12][0],bounds[12][1], valinit=const[12])
     D3= Slider(axD3, 'D3',    bounds[13][0],bounds[13][1], valinit=const[13])
@@ -283,3 +289,22 @@ if plot_sliders:
     D3.on_changed(update)
     
     plt.show()
+    
+fit = get_results(const)[1]
+    
+scaler = StandardScaler()
+scaler.fit(demands.reshape(-1,1))
+fitscaler = StandardScaler()
+fitscaler.fit(fit.reshape(-1,1))
+
+scaled_demands = scaler.transform(demands.reshape(-1,1))
+scaled_fit = fitscaler.transform(fit.reshape(-1,1))
+
+adjusted_demands = scaled_demands - scaled_fit
+
+itransformed_data = scaler.inverse_transform(adjusted_demands.reshape(-1,1))
+
+plt.figure()
+plt.plot(range(len(itransformed_data)),itransformed_data,c='r',label='adjusted')
+plt.legend()
+plt.show()
