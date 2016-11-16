@@ -35,10 +35,10 @@ else:
         df = pickle.load(f)
     
 print "Raw Dataset, rows, columns:", df.shape
-
 lim = df.loc[df['Demand'] != '?? FC1 ??']
 new_columns = [i for i in lim.columns if 'Unnamed' not in i]
 lim = lim[new_columns]
+
 lim = lim.fillna(lim.mean())
     
 temps = lim['Temperature'].values

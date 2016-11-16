@@ -92,7 +92,7 @@ frames = [fourierframe,demand_frame]
 names = ['temperature','demand']
 colours = ['r','g']
 plt.figure()
-N = 3
+N = 10
 factor = 30.
 for frame,name,colour in zip(frames,names,colours):
     filtered = frame.iloc[:N]
@@ -102,6 +102,7 @@ for frame,name,colour in zip(frames,names,colours):
         amplitude = row['amplitude']
         frequency = row['frequency']
         phase = row['phase']
+        print "A,f,p:",amplitude,frequency,phase
         y = [amplitude*np.cos((2*np.pi*frequency*i/factor)+phase) for i in x]
         y_list += y
     plt.scatter(x,y,c=colour,label=name)

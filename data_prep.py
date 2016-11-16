@@ -32,10 +32,11 @@ def previous_days_prep(lim,days):
     return final
 
 #plt.close('all')
-def load_data(source = 'round_1.xlsx',picklefile = 'round1.pickle',
+def load_data(source = 'round_1.xlsx',
               ignore_unknown_rows = True,ignore_columns=['Unnamed','Date',
                                                          'Unnamed: 2'],
               fill_with_mean=False,convert_to_float=True):
+    picklefile = source.replace('.xlsx','.pickle')
     if not os.path.isfile(picklefile):
         df = pd.read_excel(source)
         with open(picklefile,'wb') as f:
@@ -46,7 +47,7 @@ def load_data(source = 'round_1.xlsx',picklefile = 'round1.pickle',
     print "Columns:", df.columns
     print "Loaded data: rows, columns = ", df.shape
     if ignore_unknown_rows:
-        df = df.loc[df['Demand'] != '?? FC1 ??']
+        df = df.loc[(df['Demand'] != '?? FC1 ??') & (df['Demand'] != '?? FC2 ??') & (df['Demand'] != '?? FC3 ??')]
 
     new_columns = [i for i in df.columns if i not in ignore_columns+['Demand']]                  
     df = df[new_columns]
@@ -58,9 +59,10 @@ def load_data(source = 'round_1.xlsx',picklefile = 'round1.pickle',
         df = df.apply(lambda x:np.array(x,dtype=float))
     return df
     
-def load_demand(source = 'round_1.xlsx',picklefile = 'round1.pickle',
+def load_demand(source = 'round_1.xlsx',
               ignore_unknown_rows = True,fill_with_mean=False,
               convert_to_float=True):
+    picklefile = source.replace('.xlsx','.pickle')
     if not os.path.isfile(picklefile):
         df = pd.read_excel(source)
         with open(picklefile,'wb') as f:
@@ -70,7 +72,7 @@ def load_demand(source = 'round_1.xlsx',picklefile = 'round1.pickle',
             df = pickle.load(f)            
     print "Loaded data: rows, columns = ", df.shape
     if ignore_unknown_rows:
-        df = df.loc[df['Demand'] != '?? FC1 ??']
+        df = df.loc[(df['Demand'] != '?? FC1 ??') & (df['Demand'] != '?? FC2 ??') & (df['Demand'] != '?? FC3 ??')]
     df = df['Demand']
     if fill_with_mean:
         df = df.fillna(df.mean())
