@@ -22,8 +22,9 @@ from sklearn.preprocessing import StandardScaler
 import data_prep
 from sklearn.neural_network import MLPRegressor
 
+#%%
 def predict_row_by_row(neural,scaler,sourcefile,
-                       start_chop=56920,periods=range(3),end_chop=8772):
+                       start_chop=56924,periods=range(3),data_points=100):
     '''
     need at least max(period)-1 actual data points for this to work!
     '''
@@ -33,8 +34,10 @@ def predict_row_by_row(neural,scaler,sourcefile,
     demand = data_prep.load_demand(source=sourcefile,fill_with_mean=False,
                                ignore_unknown_rows=False)
     print data.shape,demand.shape
-    demand = demand.iloc[start_chop:len(demand)-end_chop]
-    data = data.iloc[start_chop:len(data)-end_chop]     
+    #demand = demand.iloc[start_chop:len(demand)-end_chop]
+    #data = data.iloc[start_chop:len(data)-end_chop]     
+    demand = demand.iloc[start_chop:start_chop+data_points]
+    data = data.iloc[start_chop:start_chop+data_points]
     print data.shape,demand.shape                 
     '''
     Data is ready to be processed, demand still has to be modified
@@ -48,16 +51,20 @@ def predict_row_by_row(neural,scaler,sourcefile,
     def replace(x):
         if type(x) == str or type(x) == unicode:
         #print x
+            replace.counter += 1
             return 0
         else:
             return x
-    print type(demand)
+    replace.counter = 0
+    #print type(demand)
     demand['Demand'] = demand['Demand'].apply(replace)
     #print np.sum(demand.isnull())
-    print type(demand),demand.columns
+    #print type(demand),demand.columns
     demand['Demand'] = pd.to_numeric(demand['Demand'])
-    print demand
-    print demand[demand['Demand']>0]
+    #print demand
+    #print demand[demand['Demand']>0]
+    
+    #print "unknown:",replace.counter
     #print type(demand)
     '''
     original index:
@@ -87,18 +94,29 @@ def predict_row_by_row(neural,scaler,sourcefile,
     and then repeat this process
     '''
     max_shift = max(periods)
-    
-    for i in range(1,len(shifted_data)): #go through all shifted data
+    for i in range(data.shape[0]-max(periods)): #go through all shifted data
         shifted_demand = data_prep.previous_days_prep(demand,periods)
-        print "shifted demand"
-        print shifted_demand
+        #print "shifted demand"
+        #print shifted_demand
         shifted_demand_data = exclude_columns(shifted_demand,['Demand_shift_0'])
-        input_data = pd.concat((shifted_data.iloc[i],shifted_demand_data.iloc[1]),axis=1).values
+        #print "shifted data 0"
+        #print shifted_data.iloc[i].values
+        #print shifted_demand_data.iloc[i].values
+        input_data = np.append(shifted_data.iloc[i].values,shifted_demand_data.iloc[i].values).reshape(1,-1)
+        #print "input_data",input_data
         scaled_input_data = scaler.transform(input_data)
+        #print "scaled input data"
+        #print scaled_input_data
         estimate = neural.predict(scaled_input_data)
-        demand.ix[i+max_shift,'Demand'] = estimate
-        print "new demand"
-        print demand
+        #print "estimated",estimate
+        demand.iloc[max_shift+i] = estimate
+        #print "new demand"
+        #print demand
+        #demand.ix[i+max_shift,'Demand'] = estimate
+        #print "new demand"
+        #print demand
+    return demand
+#%%
         
         
 def predict_from_shifted_data(neural,data,demands):
@@ -242,21 +260,36 @@ periods = range(3)
 MLP_kwargs = {
 'verbose':True,
 'max_iter':10000,
-'hidden_layer_sizes':(30,),
+'hidden_layer_sizes':(1500,),
 'tol':1e-10,
 'activation':'logistic',
 'warm_start':True,
+'max_iter':10000,
 }             
 '''
 further options set here
 '''
-'''
+total_N = data_prep.load_data('round_2.xlsx').shape[0]
+end_chop = 1000
 neural,shifted_data_scaler,score,training_demand_vals,predicted_demand_vals=NN(
                                     sourcefile='round_2.xlsx',
-                                    end_chop = 0,
+                                    end_chop = end_chop,
                                     fill_with_mean=True,
                                     ignore_unknown_rows=True,
                                     periods = periods,
                                     MLP_kwargs = MLP_kwargs)
 
-'''
+
+predicted_demand = predict_row_by_row(neural,shifted_data_scaler,'round_2.xlsx',
+                                      start_chop = total_N-end_chop-max(periods),
+                                        data_points = 800,
+                                        periods=periods)
+                                                                                
+real = data_prep.load_demand('round_2.xlsx')
+real2 = real.iloc[total_N-end_chop-max(periods):total_N-end_chop-max(periods)+800]
+t= range(len(real2))   
+plt.figure()                                                      
+plt.plot(t,real2.values,c='b',label='real')           
+plt.plot(t,predicted_demand.values,c='r',label='predicted')            
+plt.legend()
+plt.show()
