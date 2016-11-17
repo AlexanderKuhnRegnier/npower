@@ -35,7 +35,11 @@ def previous_days_prep(lim,days):
 def load_data(source = 'round_1.xlsx',
               ignore_unknown_rows = True,ignore_columns=['Unnamed','Date',
                                                          'Unnamed: 2'],
-              fill_with_mean=False,convert_to_float=True):
+              fill_with_mean=False):
+    if ignore_unknown_rows:
+        convert_to_float = True
+    else:
+        convert_to_float = False
     picklefile = source.replace('.xlsx','.pickle')
     if not os.path.isfile(picklefile):
         df = pd.read_excel(source)
@@ -60,8 +64,11 @@ def load_data(source = 'round_1.xlsx',
     return df
     
 def load_demand(source = 'round_1.xlsx',
-              ignore_unknown_rows = True,fill_with_mean=False,
-              convert_to_float=True):
+              ignore_unknown_rows = True,fill_with_mean=False):
+    if ignore_unknown_rows:
+        convert_to_float = True
+    else:
+        convert_to_float = False
     picklefile = source.replace('.xlsx','.pickle')
     if not os.path.isfile(picklefile):
         df = pd.read_excel(source)
@@ -73,7 +80,7 @@ def load_demand(source = 'round_1.xlsx',
     print "Loaded data: rows, columns = ", df.shape
     if ignore_unknown_rows:
         df = df.loc[(df['Demand'] != '?? FC1 ??') & (df['Demand'] != '?? FC2 ??') & (df['Demand'] != '?? FC3 ??')]
-    df = df['Demand']
+    df = df[['Demand']]
     if fill_with_mean:
         df = df.fillna(df.mean())
     if convert_to_float:

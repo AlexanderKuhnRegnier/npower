@@ -12,15 +12,100 @@ import os
 from numpy.fft import fft
 from numpy.fft import fftfreq
 import scipy.optimize as opt
-import copy
+#import copy
 from scipy.optimize import minimize as minimize
-import math
-import time
-from numba import jit,float64
-from matplotlib.widgets import Slider, Button, RadioButtons
+#import math
+#import time
+#from numba import jit,float64
+#from matplotlib.widgets import Slider, Button, RadioButtons
 from sklearn.preprocessing import StandardScaler
 import data_prep
 from sklearn.neural_network import MLPRegressor
+
+def predict_row_by_row(neural,scaler,sourcefile,
+                       start_chop=56920,periods=range(3),end_chop=8772):
+    '''
+    need at least max(period)-1 actual data points for this to work!
+    '''
+    assert 0 in periods, "There should be a non-shifted set!"
+    data = data_prep.load_data(source=sourcefile,fill_with_mean=True,
+                               ignore_unknown_rows=False)
+    demand = data_prep.load_demand(source=sourcefile,fill_with_mean=False,
+                               ignore_unknown_rows=False)
+    print data.shape,demand.shape
+    demand = demand.iloc[start_chop:len(demand)-end_chop]
+    data = data.iloc[start_chop:len(data)-end_chop]     
+    print data.shape,demand.shape                 
+    '''
+    Data is ready to be processed, demand still has to be modified
+    '''
+    shifted_data = data_prep.previous_days_prep(data,periods)
+    '''
+    Processing the demand - replace unknown values with 0, then shift 
+    and join up
+    '''
+    #print np.sum(demand.isnull())
+    def replace(x):
+        if type(x) == str or type(x) == unicode:
+        #print x
+            return 0
+        else:
+            return x
+    print type(demand)
+    demand['Demand'] = demand['Demand'].apply(replace)
+    #print np.sum(demand.isnull())
+    print type(demand),demand.columns
+    demand['Demand'] = pd.to_numeric(demand['Demand'])
+    print demand
+    print demand[demand['Demand']>0]
+    #print type(demand)
+    '''
+    original index:
+        0
+        1
+        2
+        3
+        4
+        5
+        .
+        .
+        .
+    if periods = [0,1,2,3]
+    then index would look like:
+        3
+        4
+        5
+        .
+        .
+        .
+    ie 0,1,2 cut off the beginning -> max_period-1 diminished
+    this will always be true, no matter how long the original index is
+    
+    so at iteration 0 (the first one), from above example, you would have 
+    data from row 3, -> estimate of demand at row 3.
+    Add this estimate to row 3 in the original list of demands,
+    and then repeat this process
+    '''
+    max_shift = max(periods)
+    
+    for i in range(1,len(shifted_data)): #go through all shifted data
+        shifted_demand = data_prep.previous_days_prep(demand,periods)
+        print "shifted demand"
+        print shifted_demand
+        shifted_demand_data = exclude_columns(shifted_demand,['Demand_shift_0'])
+        input_data = pd.concat((shifted_data.iloc[i],shifted_demand_data.iloc[1]),axis=1).values
+        scaled_input_data = scaler.transform(input_data)
+        estimate = neural.predict(scaled_input_data)
+        demand.ix[i+max_shift,'Demand'] = estimate
+        print "new demand"
+        print demand
+        
+        
+def predict_from_shifted_data(neural,data,demands):
+    predicted = neural.predict(data)
+    score = neural.score(data,demands)
+    print "Prediction score:",score
+    return score,predicted
 
 def scale(values):
     scaler = StandardScaler()
@@ -59,12 +144,37 @@ def source(sourcefile,fill_with_mean,ignore_unknown_rows=True):
     '''
     Join up the data and the demand columns into one dataframe
     '''
-    data_demand = pd.concat((data,demand),axis=1)
-    return data,demand,data_demand
+    #data_demand = pd.concat((data,demand),axis=1)
+    return data,demand
 
-
-def NN(sourcefile,to_discard,fill_with_mean,ignore_unknown_rows,
-                  periods,MLP_kwargs):
+def NN_prep(sourcefile,start_chop,end_chop,fill_with_mean,
+            ignore_unknown_rows,periods):
+    data,demand = source(sourcefile=sourcefile,
+                                     fill_with_mean=fill_with_mean,
+                                     ignore_unknown_rows=ignore_unknown_rows)
+    data = data.iloc[start_chop:len(data)-end_chop]
+    demand = demand.iloc[start_chop:len(demand)-end_chop]
+    #data_demand = data_demand.iloc[start_chop:len(data_demand)-end_chop]
+    #N = len(demand) #number of rows, ie. number of data points
+    '''
+    Number of periods to be shifted
+    '''
+    assert 0 in periods, "There should be a non-shifted set!"
+    '''
+    Shift the data and demand columns by the specified amount (in periods list)
+    '''
+    shifted_data = data_prep.previous_days_prep(data,periods)
+    shifted_demand = data_prep.previous_days_prep(demand,periods)
+    #shifted_N = len(shifted_data_demand)    #number of entries after shift
+    
+    actual_demand = select_columns(shifted_demand,['Demand_shift_0'])
+    #below still contains shifted data though!
+    shifted_demand = exclude_columns(shifted_demand,['Demand_shift_0'])  
+    shifted_data = pd.concat((shifted_data,shifted_demand),axis=1)
+    return shifted_data,actual_demand
+    
+def NN(sourcefile,end_chop,fill_with_mean,ignore_unknown_rows,
+                  periods,MLP_kwargs,neural_in=None):
     '''
     inputs:
         +source input data file
@@ -75,32 +185,20 @@ def NN(sourcefile,to_discard,fill_with_mean,ignore_unknown_rows,
         +additional arguments for the MLPRegressor
     returns:
         +neural - the MLPRegressor instance
+        +scaler - used to scale the input data (except orig. demand)
         +score - score for the training data
         +actual demand values - used for training (with terms at the end and 
                                                 beginning chopped off due to
                                                 day shifts (beginning) and 
                                                 potentially the limiting term)
+        +predicted demand values - same shape as above
     '''    
-    data,demand,data_demand = source(sourcefile=sourcefile,
-                                     fill_with_mean=fill_with_mean,
-                                     ignore_unknown_rows=ignore_unknown_rows)
-    data = data.iloc[:len(data)-to_discard]
-    demand = demand.iloc[:len(demand)-to_discard]
-    data_demand = data_demand.iloc[:len(data_demand)-to_discard]
-    N = len(demand) #number of rows, ie. number of data points
-    '''
-    Number of periods to be shifted
-    '''
-    assert 0 in periods, "There should be a non-shifted set!"
-    '''
-    Shift the data and demand columns by the specified amount (in periods list)
-    '''
-    shifted_data_demand = data_prep.previous_days_prep(data_demand,periods)
-    shifted_N = len(shifted_data_demand)    #number of entries after shift
-    
-    actual_demand = select_columns(shifted_data_demand,['Demand_shift_0'])
-    #below still contains shifted data though!
-    shifted_data = exclude_columns(shifted_data_demand,['Demand_shift_0'])
+    shifted_data,actual_demand = NN_prep(sourcefile=sourcefile,
+                                         start_chop=0,
+                                         end_chop=end_chop,
+                                         fill_with_mean=fill_with_mean,
+                                         ignore_unknown_rows=ignore_unknown_rows,
+                                         periods=periods)
     
     shifted_data_vals = shifted_data.values
     actual_demand_vals = actual_demand.values
@@ -121,25 +219,44 @@ def NN(sourcefile,to_discard,fill_with_mean,ignore_unknown_rows,
                           beta_1=beta_1,beta_2=beta_2,epsilon=epsilon,
                           learning_rate_init=learning_rate_init,alpha=alpha)
     '''
-    neural = MLPRegressor(**MLP_kwargs)
+    if neural_in:
+        print """Using passed in MLPRegressor instance, make sure the parameters
+                are right!"""
+        neural = neural_in
+    else:
+        neural = MLPRegressor(**MLP_kwargs)
     print neural.fit(shifted_data_vals,actual_demand_vals)   #perform the fitting
     score = neural.score(shifted_data_vals,actual_demand_vals)
     print "score with data from training:",score
-    print "corrcoef for same:",np.corrcoef(neural.predict(shifted_data_vals).reshape(-1,),
+    predicted = neural.predict(shifted_data_vals).reshape(-1,)
+    print "corrcoef for same:",np.corrcoef(predicted,
                                            actual_demand_vals.reshape(-1,))[0][1]
-    return neural,score,actual_demand_vals                                           
-                                           
+    return neural,shifted_data_scaler,score,actual_demand_vals,predicted                                     
+
+    
+    
+'''
+options for NN set here, as a dictionary
+'''      
+periods = range(3)                                   
 MLP_kwargs = {
 'verbose':True,
 'max_iter':10000,
-'hidden_layer_sizes':(100,),
+'hidden_layer_sizes':(30,),
 'tol':1e-10,
 'activation':'logistic',
+'warm_start':True,
 }             
+'''
+further options set here
+'''
+'''
+neural,shifted_data_scaler,score,training_demand_vals,predicted_demand_vals=NN(
+                                    sourcefile='round_2.xlsx',
+                                    end_chop = 0,
+                                    fill_with_mean=True,
+                                    ignore_unknown_rows=True,
+                                    periods = periods,
+                                    MLP_kwargs = MLP_kwargs)
 
-neural,score,training_demand_vals=NN(sourcefile='round_2.xlsx',
-                                     to_discard = 0,
-                                     fill_with_mean=True,
-                                     ignore_unknown_rows=True,
-                                     periods = range(0,10),
-                                     MLP_kwargs = MLP_kwargs)
+'''
